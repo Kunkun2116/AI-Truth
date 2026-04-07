@@ -9,11 +9,9 @@ Show what was **searched in this conversation**, what comes from **memory**, and
   <img src="docs/ai_truth_homepage_mockup.png" alt="AI Truth — evidence labels for AI responses" width="720">
 </p>
 
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/demo.mp4" width="720" controls>
-    Your browser does not support the video tag. <a href="docs/demo.mp4">Watch the demo</a>.
-  </video>
-</p>
+### Demo
+
+https://github.com/liqk2116-creator/AI-Truth/blob/main/docs/demo.mp4
 
 ---
 

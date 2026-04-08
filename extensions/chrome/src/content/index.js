@@ -213,33 +213,11 @@
         let tm;
         while ((tm = tagRe.exec(cleaned)) !== null) labelTags.push(tm[1]);
 
-        // Create hoverable pill
+        // Create hoverable pill (hover handled by delegated listeners below)
         const pill = document.createElement('span');
         pill.className = 'cred-label-pill';
         pill.textContent = labelTags.join('·');
         pill.dataset.tags = JSON.stringify(labelTags);
-
-        // Attach hover card to pill
-        pill.addEventListener('mouseenter', () => {
-          if (mode !== 'audit') return;
-          const tags = JSON.parse(pill.dataset.tags || '[]');
-          if (tags.length === 0) return;
-          // Remove any existing hover cards first
-          document.querySelectorAll('.cred-hover-card').forEach(c => c.remove());
-          const card = createHoverCard(tags);
-          document.body.appendChild(card);
-          const rect = pill.getBoundingClientRect();
-          let top = rect.top - card.offsetHeight - 6;
-          let left = rect.left;
-          if (top < 4) top = rect.bottom + 6;
-          if (left + card.offsetWidth > window.innerWidth - 8) left = window.innerWidth - card.offsetWidth - 8;
-          if (left < 4) left = 4;
-          card.style.top = top + 'px';
-          card.style.left = left + 'px';
-        });
-        pill.addEventListener('mouseleave', () => {
-          document.querySelectorAll('.cred-hover-card').forEach(c => c.remove());
-        });
 
         // Store original label text in a hidden span so removeAll() can restore it
         const hidden = document.createElement('span');
@@ -289,22 +267,9 @@
     // Apply color class
     p.classList.add('cred-' + color);
 
-    // Fragile underline
+    // Fragile underline (hover handled by delegated listeners below)
     if (hasFragileTag(tags)) {
       p.classList.add('cred-fragile');
-      let fragTip = null;
-      p.addEventListener('mouseenter', () => {
-        if (mode !== 'audit') return;
-        fragTip = document.createElement('div');
-        fragTip.className = 'cred-fragile-tip';
-        fragTip.textContent = 'F = Insufficient evidence / unverifiable timeliness / missing key premise';
-        p.style.position = p.style.position || 'relative';
-        p.appendChild(fragTip);
-      });
-      p.addEventListener('mouseleave', () => {
-        if (fragTip && fragTip.parentNode) fragTip.parentNode.removeChild(fragTip);
-        fragTip = null;
-      });
     }
 
     // Replace raw labels with hoverable pills (hover card attached to each pill)
@@ -351,22 +316,24 @@
     saveCounts();
   }
 
-  // --- Badge / storage ---
+  // --- Badge / storage (fire-and-forget, never triggers destroy) ---
   function updateBadge() {
-    safeChromeCall(() => {
+    try {
+      if (!chrome.runtime?.id) return;
       chrome.runtime.sendMessage({
         type: 'updateBadge',
         counts: { red: counts.red, orange: counts.orange, gray: counts.gray, green: counts.green },
       }).catch(() => {});
-    });
+    } catch (e) {}
   }
 
   function saveCounts() {
-    safeChromeCall(() => {
+    try {
+      if (!chrome.runtime?.id) return;
       chrome.storage.local.set({
         credCounts: { red: counts.red, orange: counts.orange, gray: counts.gray, green: counts.green }
       });
-    });
+    } catch (e) {}
   }
 
   // --- Debounce ---
@@ -391,6 +358,49 @@
   });
 
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+  // --- Delegated hover card for pills (one listener, never duplicated) ---
+  document.addEventListener('mouseenter', (e) => {
+    const pill = e.target.closest('.cred-label-pill');
+    if (!pill || mode !== 'audit') return;
+    document.querySelectorAll('.cred-hover-card').forEach(c => c.remove());
+    const tags = JSON.parse(pill.dataset.tags || '[]');
+    if (tags.length === 0) return;
+    const card = createHoverCard(tags);
+    document.body.appendChild(card);
+    const rect = pill.getBoundingClientRect();
+    let top = rect.top - card.offsetHeight - 6;
+    let left = rect.left;
+    if (top < 4) top = rect.bottom + 6;
+    if (left + card.offsetWidth > window.innerWidth - 8) left = window.innerWidth - card.offsetWidth - 8;
+    if (left < 4) left = 4;
+    card.style.top = top + 'px';
+    card.style.left = left + 'px';
+  }, true);
+
+  document.addEventListener('mouseleave', (e) => {
+    if (e.target.closest('.cred-label-pill')) {
+      document.querySelectorAll('.cred-hover-card').forEach(c => c.remove());
+    }
+  }, true);
+
+  // --- Delegated fragile tip (one listener, never duplicated) ---
+  document.addEventListener('mouseenter', (e) => {
+    const p = e.target.closest('.cred-fragile');
+    if (!p || mode !== 'audit') return;
+    document.querySelectorAll('.cred-fragile-tip').forEach(t => t.remove());
+    const fragTip = document.createElement('div');
+    fragTip.className = 'cred-fragile-tip';
+    fragTip.textContent = 'F = Insufficient evidence / unverifiable timeliness / missing key premise';
+    p.style.position = p.style.position || 'relative';
+    p.appendChild(fragTip);
+  }, true);
+
+  document.addEventListener('mouseleave', (e) => {
+    if (e.target.closest('.cred-fragile')) {
+      document.querySelectorAll('.cred-fragile-tip').forEach(t => t.remove());
+    }
+  }, true);
 
   // --- Init ---
   applyMode();

@@ -114,9 +114,9 @@
     }
   }
 
-  // Persistent polling: keeps button alive and recovers from destroyed state.
-  // SPA navigations can trigger context invalidation that sets destroyed=true,
-  // but the context may become valid again on the next page.
+  // Persistent polling: keeps button alive, recovers from destroyed state,
+  // and catches paragraphs that the MutationObserver + debounce missed
+  // (e.g. late renders after streaming ends).
   setInterval(() => {
     ensureModeBtn();
     if (destroyed && isContextValid()) {
@@ -124,9 +124,9 @@
       try {
         observer.observe(document.body, { childList: true, subtree: true, characterData: true });
       } catch (e) {}
-      scanAll();
     }
-  }, 2000);
+    if (enabled && !destroyed) scanAll();
+  }, 1500);
 
   // --- Find paragraphs ---
   function findParagraphs() {

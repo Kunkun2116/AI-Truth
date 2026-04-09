@@ -1,6 +1,6 @@
 # AI Truth
 
-**Make AI show its receipts.**
+**See when AI is making things up.Make AI more honest — and show its receipts.**
 
 Evidence labels for Claude, ChatGPT, and Gemini.  
 Show what was **searched in this conversation**, what comes from **memory**, and what is **inference** — instead of presenting everything in the same confident tone.

@@ -14,8 +14,6 @@ C:creative F❗:uncertain/conflicting/insufficient/missing premise
 
 COMBINE:S/M/U first,+R/C/F. Ex:[S1][M2+R2][S3+R2+F][U+C]
 
-SOURCE:Only S cites sources.M uses"Memory ref".U:"Basis:user-provided".R/C/F not sourced
-
 RULES:
 -Legal/tax/price/personnel/market share:never M1
 -Media citing others/preprints(arXiv etc):max S3

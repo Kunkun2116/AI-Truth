@@ -190,10 +190,12 @@
     return !!(el.closest('[data-is-streaming="true"]') || el.closest('.result-streaming'));
   }
 
-  // --- Append a summary pill to element (non-destructive — never replaces text nodes) ---
+  // --- Wrap raw bracket labels in hidden spans + append summary pill ---
   function replaceLabelsInElement(el) {
     // Remove any existing pill first
     el.querySelectorAll('.cred-label-pill').forEach(p => p.remove());
+    // Unwrap any previously wrapped raw labels to avoid nesting
+    unwrapRawLabels(el);
 
     const text = el.textContent || '';
     const labelPattern = /\[([^\]]*\b(?:S[1-3]|M[1-3]|R[1-3]|U|C|F)\b[^\]]*)\]/g;
@@ -211,12 +213,74 @@
 
     if (allTags.length === 0) return;
 
-    // Append a single summary pill at the end (does not modify text nodes)
+    // Wrap raw bracket labels in text nodes with hidden spans
+    wrapRawLabels(el);
+
+    // Append a single summary pill at the end
     const pill = document.createElement('span');
     pill.className = 'cred-label-pill';
     pill.textContent = allTags.join('·');
     pill.dataset.tags = JSON.stringify(allTags);
     el.appendChild(pill);
+  }
+
+  // --- Wrap raw label text (e.g. [S1], [M2+R3]) in hidden spans ---
+  function wrapRawLabels(el) {
+    const rawLabelRe = /\[([^\]]*\b(?:S[1-3]|M[1-3]|R[1-3]|U|C|F)\b[^\]]*)\]/g;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    const textNodes = [];
+    let node;
+    while ((node = walker.nextNode())) textNodes.push(node);
+
+    for (const tn of textNodes) {
+      if (!rawLabelRe.test(tn.nodeValue)) continue;
+      rawLabelRe.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let lastIndex = 0;
+      let m;
+      while ((m = rawLabelRe.exec(tn.nodeValue)) !== null) {
+        if (m.index > lastIndex) {
+          frag.appendChild(document.createTextNode(tn.nodeValue.slice(lastIndex, m.index)));
+        }
+        const span = document.createElement('span');
+        span.className = 'cred-raw-label';
+        span.textContent = m[0];
+        frag.appendChild(span);
+        lastIndex = rawLabelRe.lastIndex;
+      }
+      if (lastIndex < tn.nodeValue.length) {
+        frag.appendChild(document.createTextNode(tn.nodeValue.slice(lastIndex)));
+      }
+      tn.parentNode.replaceChild(frag, tn);
+    }
+
+    // Hide parent inline elements that became visually empty after wrapping
+    // (e.g. Claude may render [S1] inside a <span> or <code> with its own background)
+    el.querySelectorAll('.cred-raw-label').forEach((span) => {
+      let parent = span.parentElement;
+      while (parent && parent !== el) {
+        const tag = parent.tagName;
+        // Only collapse inline-level wrappers, not block containers
+        if (tag === 'P' || tag === 'LI' || tag === 'DIV' || tag === 'BLOCKQUOTE') break;
+        const clone = parent.cloneNode(true);
+        clone.querySelectorAll('.cred-raw-label').forEach(s => s.remove());
+        if (clone.textContent.trim() === '') {
+          parent.classList.add('cred-raw-label-parent');
+        }
+        parent = parent.parentElement;
+      }
+    });
+  }
+
+  // --- Unwrap raw label spans back to plain text ---
+  function unwrapRawLabels(el) {
+    el.querySelectorAll('.cred-raw-label-parent').forEach((p) => {
+      p.classList.remove('cred-raw-label-parent');
+    });
+    el.querySelectorAll('.cred-raw-label').forEach((span) => {
+      span.replaceWith(document.createTextNode(span.textContent));
+    });
+    el.normalize();
   }
 
   // --- Get text content excluding our own pill elements (read-only, no DOM mutation) ---
@@ -296,6 +360,7 @@
     document.querySelectorAll('[data-cred-processed]').forEach((el) => {
       el.classList.remove('cred-red', 'cred-orange', 'cred-gray', 'cred-green', 'cred-risk', 'cred-fragile');
       el.querySelectorAll('.cred-label-pill').forEach(pill => pill.remove());
+      unwrapRawLabels(el);
       delete el.dataset.credProcessed;
       delete el.dataset.credColor;
       delete el.dataset.credLabels;

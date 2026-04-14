@@ -39,7 +39,14 @@
   text-underline-offset: 4px !important;
 }
 
-/* (hidden-label spans removed — pills are now appended non-destructively) */
+/* Hide raw bracket labels in text — pills/badges replace them */
+.cred-raw-label {
+  display: none !important;
+}
+/* Hide parent inline elements that became empty after label removal */
+.cred-raw-label-parent {
+  display: none !important;
+}
 
 /* === Label pill (Audit mode — color matches paragraph) === */
 .cred-label-pill {

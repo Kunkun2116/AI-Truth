@@ -159,7 +159,7 @@
 
 /* Simple mode badge — no emoji, colored pill with word */
 .mode-simple .cred-green::before {
-  content: 'Verified';
+  content: 'V';
   display: inline-block;
   font-size: 11px;
   font-weight: 700;
@@ -173,7 +173,7 @@
   line-height: 1.5;
 }
 .mode-simple .cred-orange::before {
-  content: 'Caution';
+  content: 'C';
   display: inline-block;
   font-size: 11px;
   font-weight: 700;
@@ -187,7 +187,7 @@
   line-height: 1.5;
 }
 .mode-simple .cred-gray::before {
-  content: 'Ref';
+  content: 'R';
   display: inline-block;
   font-size: 11px;
   font-weight: 700;
@@ -201,7 +201,7 @@
   line-height: 1.5;
 }
 .mode-simple .cred-red::before {
-  content: 'Alert';
+  content: 'F';
   display: inline-block;
   font-size: 11px;
   font-weight: 700;

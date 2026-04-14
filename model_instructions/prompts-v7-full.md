@@ -82,9 +82,9 @@ U: based mainly on user-provided material, not externally verified
 
 R = Reasoning (optional add-on)
 
-R1: mechanically verifiable reasoning inside a clear rule system
-R2: structured judgment; framework/criteria/threshold depends on framing
-R3❗: open synthesis; cross-dimensional weighing, value judgments, no accepted scoring function
+R1: convergent-verifiable — conclusion can be independently checked through formal steps, source code, specs, docs, textbooks, or authoritative references; qualified verifiers converge on essentially the same answer without substantive judgment or tradeoff choices. Includes mechanical calculation, direct rule matching, and descriptive application of established technical frameworks/mechanisms. Applying a clear fixed framework is R1 if the mapping is mechanical/unambiguous, R2 if it requires non-trivial interpretation or context-dependent judgment.
+R2: judgment/tradeoff-dependent — conclusion depends on scenario-specific tradeoffs, criteria choice, hidden assumptions, advice, prioritization, or selecting among bounded reasonable options within a specified or established framework. Different qualified experts could reasonably reach different conclusions.
+R3❗: open synthesis — framework or criterion itself is undefined or unbounded; must first define what counts as "better" etc. before reasoning can proceed; cross-domain weighing, speculative reasoning, predictions, value judgments, no accepted scoring function
 
 C = Creative (optional add-on)
 
@@ -121,9 +121,8 @@ Do not up-rank by default
 
 Important:
 
-R2 is not "worse reasoning" than R3; it is usually more structured
-If a judgment can reasonably be reduced to structured judgment, prefer R2 over R3
-Use R3 only when the judgment truly depends on open synthesis across multiple incomparable dimensions
+Decision test: "Would another expert converge?" Yes → R1. No → "Bounded framework/criterion?" Yes → R2. No → R3.
+Guardrail: Do NOT upgrade advisory, strategic, or scenario-dependent recommendations to R1 just because they cite docs or frameworks. If the conclusion depends on goals, preferences, constraints, or implicit assumptions, keep R2.
 
 ================================
 5) HARD ANTI-INFLATION RULES
@@ -196,26 +195,37 @@ do not present guesswork as verified fact
 
 ================================
 7) R-TYPE GUIDANCE
-Use R1 only when the reasoning is mechanically checkable under explicit rules.
+Use R1 when qualified verifiers would converge on the same conclusion.
 Examples:
 
 arithmetic
 rule-based threshold application
 formal logic inside a closed setup
+descriptive application of established technical framework (mechanical/unambiguous mapping)
+direct lookup in specs, docs, textbooks
 
-Use R2 for:
+Use R2 when bounded options exist within an established framework, but different qualified experts could reasonably reach different conclusions.
+Examples:
 
-framework-dependent judgments
-scope/threshold/framing choices
+scenario-specific tradeoff judgments
+criteria/threshold/framing choices
 policy interpretation with structured caveats
+advisory or strategic recommendations (even if citing docs)
 "this supports X but does not fully prove Y"
 
-Use R3❗ for:
+Use R3❗ when the framework or criterion itself is undefined or unbounded — must first define what counts as "better" etc.
+Examples:
 
 open future outlooks
 cross-domain weighing without accepted scoring
 strategic "who will win" type synthesis
 value-laden comparisons without a standard function
+speculative reasoning, predictions
+questions requiring definition of evaluation criteria before answering
+
+Decision test: "Would another expert converge?" Yes → R1. No → "Bounded framework/criterion?" Yes → R2. No → R3.
+
+Guardrail: Do NOT upgrade advisory, strategic, or scenario-dependent recommendations to R1 just because they cite docs or frameworks. If the conclusion depends on goals, preferences, constraints, or implicit assumptions, keep R2.
 
 For trends / rankings / legal characterization / future direction:
 

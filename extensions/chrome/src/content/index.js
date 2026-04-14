@@ -7,6 +7,7 @@
   let enabled = true;
   let destroyed = false;
   let mode = 'audit'; // default: audit
+  let mutating = false; // true while our code modifies the DOM (suppresses observer re-scans)
   const counts = { red: 0, orange: 0, gray: 0, green: 0 };
 
   // --- Tag metadata for hover cards ---
@@ -130,26 +131,21 @@
 
   // --- Find paragraphs ---
   function findParagraphs() {
+    const BLOCK_TAGS = 'p, li, h1, h2, h3, h4, h5, h6';
     const selectors = [
       // Claude
-      '[data-testid*="assistant-message"] p, [data-testid*="assistant-message"] li',
-      '[data-testid*="assistant"] p, [data-testid*="assistant"] li',
-      '.font-claude-message p, .font-claude-message li',
-      '[class*="Message"][class*="assistant"] p, [class*="Message"][class*="assistant"] li',
+      ...['[data-testid*="assistant-message"]', '[data-testid*="assistant"]',
+        '.font-claude-message', '[class*="Message"][class*="assistant"]'],
       // ChatGPT
-      '[data-message-author-role="assistant"] p, [data-message-author-role="assistant"] li',
-      '.markdown.prose p, .markdown.prose li',
-      '[class*="markdown"][class*="result"] p, [class*="markdown"][class*="result"] li',
+      ...['[data-message-author-role="assistant"]', '.markdown.prose',
+        '[class*="markdown"][class*="result"]'],
       // Gemini
-      '.model-response-text p, .model-response-text li',
-      '.response-container p, .response-container li',
-      'message-content p, message-content li',
-      '[class*="response"][class*="container"] p, [class*="response"][class*="container"] li',
-      '.markdown-main-panel p, .markdown-main-panel li',
+      ...['[class*="model-response"]', '.model-response-text', '.response-container',
+        'message-content', '[class*="response"][class*="container"]',
+        '.markdown-main-panel'],
       // Broad fallbacks
-      '[data-is-streaming] p, [data-is-streaming] li',
-      '.prose p, .prose li',
-    ];
+      ...['[data-is-streaming]', '.prose'],
+    ].map(root => BLOCK_TAGS.split(', ').map(tag => root + ' ' + tag).join(', '));
     const seen = new Set();
     const result = [];
     for (const sel of selectors) {
@@ -187,15 +183,20 @@
 
   // --- Check if element is inside a streaming message ---
   function isStreaming(el) {
-    return !!(el.closest('[data-is-streaming="true"]') || el.closest('.result-streaming'));
+    return !!(
+      el.closest('[data-is-streaming="true"]') ||
+      el.closest('.result-streaming') ||
+      // Gemini: actively streaming response indicators
+      el.closest('[class*="streaming"]') ||
+      el.closest('[class*="pending"]') ||
+      el.closest('.model-response-text [class*="loading"]')
+    );
   }
 
-  // --- Wrap raw bracket labels in hidden spans + append summary pill ---
+  // --- Append summary pill to element (non-destructive, no text node mutation) ---
   function replaceLabelsInElement(el) {
     // Remove any existing pill first
     el.querySelectorAll('.cred-label-pill').forEach(p => p.remove());
-    // Unwrap any previously wrapped raw labels to avoid nesting
-    unwrapRawLabels(el);
 
     const text = el.textContent || '';
     const labelPattern = /\[([^\]]*\b(?:S[1-3]|M[1-3]|R[1-3]|U|C|F)\b[^\]]*)\]/g;
@@ -213,10 +214,7 @@
 
     if (allTags.length === 0) return;
 
-    // Wrap raw bracket labels in text nodes with hidden spans
-    wrapRawLabels(el);
-
-    // Append a single summary pill at the end
+    // Append a single summary pill at the end (no text node mutation here)
     const pill = document.createElement('span');
     pill.className = 'cred-label-pill';
     pill.textContent = allTags.join('·');
@@ -294,9 +292,7 @@
 
   // --- Process paragraph ---
   function processParagraph(p) {
-    // Skip paragraphs inside actively streaming messages
-    if (isStreaming(p)) return;
-
+    const streaming = isStreaming(p);
     const text = getCleanText(p);
     const tags = extractTags(text);
 
@@ -305,14 +301,28 @@
     if (tags.length === 0) return;
 
     // Already processed and content hasn't changed — skip entirely
-    if (p.dataset.credProcessed && p.dataset.credText === text) return;
+    if (p.dataset.credProcessed && p.dataset.credText === text) {
+      // Text is stable and not streaming — wrap raw labels if not already wrapped
+      if (!streaming && !p.dataset.credWrapped) {
+        mutating = true;
+        try {
+          unwrapRawLabels(p);
+          wrapRawLabels(p);
+        } finally { mutating = false; }
+        p.dataset.credWrapped = 'true';
+      }
+      return;
+    }
 
     // Content changed since last process — strip old decorations first
     if (p.dataset.credProcessed) {
-      p.classList.remove('cred-red', 'cred-orange', 'cred-gray', 'cred-green', 'cred-fragile');
-      p.querySelectorAll('.cred-label-pill').forEach(pill => pill.remove());
-      // Clean up any orphaned hover cards
-      document.querySelectorAll('.cred-hover-card').forEach(c => c.remove());
+      mutating = true;
+      try {
+        p.classList.remove('cred-red', 'cred-orange', 'cred-gray', 'cred-green', 'cred-fragile');
+        p.querySelectorAll('.cred-label-pill').forEach(pill => pill.remove());
+        unwrapRawLabels(p);
+      } finally { mutating = false; }
+      delete p.dataset.credWrapped;
     }
 
     const color = getColorLevel(tags);
@@ -330,9 +340,11 @@
       p.classList.add('cred-fragile');
     }
 
-    // Append summary pill (non-destructive)
+    // Append summary pill (non-destructive, does NOT touch text nodes)
     replaceLabelsInElement(p);
 
+    // Mark processed but NOT wrapped — raw labels will be hidden on next
+    // stable scan (text unchanged between two consecutive scans)
     p.dataset.credProcessed = 'true';
   }
 
@@ -357,15 +369,19 @@
 
   // --- Remove all ---
   function removeAll() {
-    document.querySelectorAll('[data-cred-processed]').forEach((el) => {
-      el.classList.remove('cred-red', 'cred-orange', 'cred-gray', 'cred-green', 'cred-risk', 'cred-fragile');
-      el.querySelectorAll('.cred-label-pill').forEach(pill => pill.remove());
-      unwrapRawLabels(el);
-      delete el.dataset.credProcessed;
-      delete el.dataset.credColor;
-      delete el.dataset.credLabels;
-      delete el.dataset.credText;
-    });
+    mutating = true;
+    try {
+      document.querySelectorAll('[data-cred-processed]').forEach((el) => {
+        el.classList.remove('cred-red', 'cred-orange', 'cred-gray', 'cred-green', 'cred-risk', 'cred-fragile');
+        el.querySelectorAll('.cred-label-pill').forEach(pill => pill.remove());
+        unwrapRawLabels(el);
+        delete el.dataset.credProcessed;
+        delete el.dataset.credColor;
+        delete el.dataset.credLabels;
+        delete el.dataset.credText;
+        delete el.dataset.credWrapped;
+      });
+    } finally { mutating = false; }
     counts.red = 0; counts.orange = 0; counts.gray = 0; counts.green = 0;
     updateBadge();
     saveCounts();
@@ -401,7 +417,7 @@
   const debouncedScan = debounce(scanAll, 300);
 
   const observer = new MutationObserver((mutations) => {
-    if (destroyed) return;
+    if (destroyed || mutating) return;
     ensureModeBtn();
     if (!enabled) return;
     for (const mutation of mutations) {

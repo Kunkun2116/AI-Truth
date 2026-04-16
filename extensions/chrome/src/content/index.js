@@ -300,10 +300,20 @@
     // (streaming may add labels after initial render)
     if (tags.length === 0) return;
 
-    // Already processed and content hasn't changed — skip entirely
-    if (p.dataset.credProcessed && p.dataset.credText === text) {
-      // Text is stable and not streaming — wrap raw labels if not already wrapped
-      if (!streaming && !p.dataset.credWrapped) {
+    const textStable = p.dataset.credText === text;
+    const alreadyProcessed = !!p.dataset.credProcessed;
+
+    // Text unchanged since last scan — apply deferred DOM mutations (pill, wrap)
+    // only when streaming is done, to avoid interfering with React's reconciliation
+    // of ChatGPT/Claude/Gemini's incremental renders.
+    if (alreadyProcessed && textStable) {
+      if (streaming) return;
+      if (!p.dataset.credPilled) {
+        mutating = true;
+        try { replaceLabelsInElement(p); } finally { mutating = false; }
+        p.dataset.credPilled = 'true';
+      }
+      if (!p.dataset.credWrapped) {
         mutating = true;
         try {
           unwrapRawLabels(p);
@@ -315,7 +325,7 @@
     }
 
     // Content changed since last process — strip old decorations first
-    if (p.dataset.credProcessed) {
+    if (alreadyProcessed) {
       mutating = true;
       try {
         p.classList.remove('cred-red', 'cred-orange', 'cred-gray', 'cred-green', 'cred-fragile');
@@ -323,6 +333,7 @@
         unwrapRawLabels(p);
       } finally { mutating = false; }
       delete p.dataset.credWrapped;
+      delete p.dataset.credPilled;
     }
 
     const color = getColorLevel(tags);
@@ -332,7 +343,8 @@
     p.dataset.credColor = color;
     p.dataset.credText = text;
 
-    // Apply color class
+    // Apply color class — classList changes don't mutate the DOM tree, so
+    // they're safe during streaming. (Our observer ignores attribute mutations.)
     p.classList.add('cred-' + color);
 
     // Fragile underline (hover handled by delegated listeners below)
@@ -340,11 +352,10 @@
       p.classList.add('cred-fragile');
     }
 
-    // Append summary pill (non-destructive, does NOT touch text nodes)
-    replaceLabelsInElement(p);
-
-    // Mark processed but NOT wrapped — raw labels will be hidden on next
-    // stable scan (text unchanged between two consecutive scans)
+    // Pill append + raw-label wrap are DOM-tree mutations that break React's
+    // reconciliation of streaming paragraphs (causing visible content truncation
+    // in ChatGPT until refresh). Defer both until a later scan finds the text
+    // unchanged — the 1.5s periodic scan adds them once streaming ends.
     p.dataset.credProcessed = 'true';
   }
 
@@ -380,6 +391,7 @@
         delete el.dataset.credLabels;
         delete el.dataset.credText;
         delete el.dataset.credWrapped;
+        delete el.dataset.credPilled;
       });
     } finally { mutating = false; }
     counts.red = 0; counts.orange = 0; counts.gray = 0; counts.green = 0;

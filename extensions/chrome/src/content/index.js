@@ -231,6 +231,7 @@
     while ((node = walker.nextNode())) textNodes.push(node);
 
     for (const tn of textNodes) {
+      if (!tn.parentNode || !tn.nodeValue) continue; // skip detached nodes
       if (!rawLabelRe.test(tn.nodeValue)) continue;
       rawLabelRe.lastIndex = 0;
       const frag = document.createDocumentFragment();
@@ -249,7 +250,7 @@
       if (lastIndex < tn.nodeValue.length) {
         frag.appendChild(document.createTextNode(tn.nodeValue.slice(lastIndex)));
       }
-      tn.parentNode.replaceChild(frag, tn);
+      try { tn.parentNode.replaceChild(frag, tn); } catch (e) {}
     }
 
     // Hide parent inline elements that became visually empty after wrapping
@@ -259,7 +260,7 @@
       while (parent && parent !== el) {
         const tag = parent.tagName;
         // Only collapse inline-level wrappers, not block containers
-        if (tag === 'P' || tag === 'LI' || tag === 'DIV' || tag === 'BLOCKQUOTE') break;
+        if (/^(P|LI|DIV|BLOCKQUOTE|H[1-6])$/.test(tag)) break;
         const clone = parent.cloneNode(true);
         clone.querySelectorAll('.cred-raw-label').forEach(s => s.remove());
         if (clone.textContent.trim() === '') {
@@ -359,9 +360,18 @@
     p.dataset.credProcessed = 'true';
   }
 
+  // --- Scroll suppression: pause scanning while user drags scrollbar ---
+  let scrolling = false;
+  let scrollTimer = null;
+  window.addEventListener('scroll', () => {
+    scrolling = true;
+    if (scrollTimer) clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => { scrolling = false; }, 400);
+  }, true);
+
   // --- Scan ---
   function scanAll() {
-    if (!enabled || destroyed) return;
+    if (!enabled || destroyed || scrolling) return;
 
     counts.red = 0; counts.orange = 0; counts.gray = 0; counts.green = 0;
 
@@ -442,46 +452,70 @@
 
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-  // --- Delegated hover card for pills (one listener, never duplicated) ---
+  // --- Delegated hover card for pills (debounced to prevent flicker) ---
+  let hoverHideTimer = null;
+  let activePill = null;
+
   document.addEventListener('mouseenter', (e) => {
     const pill = e.target.closest('.cred-label-pill');
     if (!pill || mode !== 'audit') return;
+    // Cancel pending hide if re-entering same or different pill
+    if (hoverHideTimer) { clearTimeout(hoverHideTimer); hoverHideTimer = null; }
+    // Skip if already showing card for this pill
+    if (activePill === pill) return;
+    activePill = pill;
     document.querySelectorAll('.cred-hover-card').forEach(c => c.remove());
-    const tags = JSON.parse(pill.dataset.tags || '[]');
-    if (tags.length === 0) return;
-    const card = createHoverCard(tags);
-    document.body.appendChild(card);
-    const rect = pill.getBoundingClientRect();
-    let top = rect.top - card.offsetHeight - 6;
-    let left = rect.left;
-    if (top < 4) top = rect.bottom + 6;
-    if (left + card.offsetWidth > window.innerWidth - 8) left = window.innerWidth - card.offsetWidth - 8;
-    if (left < 4) left = 4;
-    card.style.top = top + 'px';
-    card.style.left = left + 'px';
+    try {
+      const tags = JSON.parse(pill.dataset.tags || '[]');
+      if (tags.length === 0) return;
+      const card = createHoverCard(tags);
+      mutating = true;
+      try { document.body.appendChild(card); } finally { mutating = false; }
+      const rect = pill.getBoundingClientRect();
+      let top = rect.top - card.offsetHeight - 6;
+      let left = rect.left;
+      if (top < 4) top = rect.bottom + 6;
+      if (left + card.offsetWidth > window.innerWidth - 8) left = window.innerWidth - card.offsetWidth - 8;
+      if (left < 4) left = 4;
+      card.style.top = top + 'px';
+      card.style.left = left + 'px';
+    } catch (e) {}
   }, true);
 
   document.addEventListener('mouseleave', (e) => {
     if (e.target.closest('.cred-label-pill')) {
-      document.querySelectorAll('.cred-hover-card').forEach(c => c.remove());
+      // Delay hide to prevent flicker when mouse moves briefly off pill
+      hoverHideTimer = setTimeout(() => {
+        document.querySelectorAll('.cred-hover-card').forEach(c => c.remove());
+        activePill = null;
+        hoverHideTimer = null;
+      }, 120);
     }
   }, true);
 
-  // --- Delegated fragile tip (one listener, never duplicated) ---
+  // --- Delegated fragile tip (debounced hide) ---
+  let fragHideTimer = null;
+
   document.addEventListener('mouseenter', (e) => {
     const p = e.target.closest('.cred-fragile');
     if (!p || mode !== 'audit') return;
+    if (fragHideTimer) { clearTimeout(fragHideTimer); fragHideTimer = null; }
+    if (p.querySelector('.cred-fragile-tip')) return; // already showing
     document.querySelectorAll('.cred-fragile-tip').forEach(t => t.remove());
     const fragTip = document.createElement('div');
     fragTip.className = 'cred-fragile-tip';
     fragTip.textContent = 'F = Insufficient evidence / unverifiable timeliness / missing key premise';
     p.style.position = p.style.position || 'relative';
-    p.appendChild(fragTip);
+    mutating = true;
+    try { p.appendChild(fragTip); } finally { mutating = false; }
   }, true);
 
   document.addEventListener('mouseleave', (e) => {
     if (e.target.closest('.cred-fragile')) {
-      document.querySelectorAll('.cred-fragile-tip').forEach(t => t.remove());
+      fragHideTimer = setTimeout(() => {
+        document.querySelectorAll('.cred-fragile-tip').forEach(t => t.remove());
+        fragHideTimer = null;
+      }, 120);
     }
   }, true);
 

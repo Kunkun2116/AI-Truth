@@ -457,7 +457,7 @@
   let activePill = null;
 
   document.addEventListener('mouseenter', (e) => {
-    const pill = e.target.closest('.cred-label-pill');
+    const pill = e.target?.closest?.('.cred-label-pill');
     if (!pill || mode !== 'audit') return;
     // Cancel pending hide if re-entering same or different pill
     if (hoverHideTimer) { clearTimeout(hoverHideTimer); hoverHideTimer = null; }
@@ -483,7 +483,7 @@
   }, true);
 
   document.addEventListener('mouseleave', (e) => {
-    if (e.target.closest('.cred-label-pill')) {
+    if (e.target?.closest?.('.cred-label-pill')) {
       // Delay hide to prevent flicker when mouse moves briefly off pill
       hoverHideTimer = setTimeout(() => {
         document.querySelectorAll('.cred-hover-card').forEach(c => c.remove());
@@ -497,7 +497,7 @@
   let fragHideTimer = null;
 
   document.addEventListener('mouseenter', (e) => {
-    const p = e.target.closest('.cred-fragile');
+    const p = e.target?.closest?.('.cred-fragile');
     if (!p || mode !== 'audit') return;
     if (fragHideTimer) { clearTimeout(fragHideTimer); fragHideTimer = null; }
     if (p.querySelector('.cred-fragile-tip')) return; // already showing
@@ -511,7 +511,7 @@
   }, true);
 
   document.addEventListener('mouseleave', (e) => {
-    if (e.target.closest('.cred-fragile')) {
+    if (e.target?.closest?.('.cred-fragile')) {
       fragHideTimer = setTimeout(() => {
         document.querySelectorAll('.cred-fragile-tip').forEach(t => t.remove());
         fragHideTimer = null;
